@@ -18,6 +18,14 @@
 #include <cstdio>
 
 #include "mbed_version.h"
+#include "mbed.h"
+
+
+
+
+
+
+
 
 #include "lorawan/LoRaWANInterface.h"
 #include "lorawan/system/lorawan_data_structures.h"
@@ -59,6 +67,18 @@ uint8_t rx_buffer[30];
  */
 #define PC_9                            0
 
+
+#define TCS34725_CDATAL 0x14
+#define TCS34725_RDATAL 0x16
+#define TCS34725_GDATAL 0x18
+#define TCS34725_BDATAL 0x1A
+#define COMMAND_ADDRESS 0X80
+#define TCS34725_ADDRESS 0x29<<1    // RGB sensor address
+#define Si7021_ADDRESS 0x40<<1      // Temperature humidity address
+#define MMA8451_I2C_ADDRESS 0x1C<<1
+
+
+
 /**
  * Dummy sensor class object
  */
@@ -99,6 +119,26 @@ static uint8_t DEV_EUI[] = {0x7b, 0x39, 0x32, 0x35, 0x59, 0x37, 0x91, 0x94};
 static uint8_t APP_EUI[] = {0x70, 0xb3, 0xd5, 0x7e, 0xd0, 0x00, 0xfc, 0x4d};
 static uint8_t APP_KEY[] = {0xf3, 0x1c, 0x2e, 0x8b, 0xc6, 0x71, 0x28, 0x1d,
                             0x51, 0x16, 0xf0, 0x8f, 0xf0, 0xb7, 0x92, 0x8f};
+
+I2C i2c(PB_9, PB_8); 
+
+float timeGPS, latitude, longitude, altitude;
+int counter_GPS=0;
+BufferedSerial GPS(PA_9, PA_10, 9600);
+
+float v_brightness;
+AnalogIn Brightness(PA_4);
+
+
+float v_temp;
+float v_humidity;
+
+void location();
+void parseSentenceGPS(const char* sentence);
+float brightness();
+void tempAndHum();
+
+
 
 /**
  * Entry point for application
@@ -192,18 +232,30 @@ static void send_message()
     int16_t retcode;
     int32_t sensor_value;
 
+    location();
+    brightness();
+    
+    if(latitude == 0 or longitude == 0){
+        latitude = 43.348273;
+        longitude = -8.349613;
+    }
+
     if (ds1820.begin()) {
         ds1820.startConversion();
         sensor_value = ds1820.read();
-        printf("\r\n Dummy Sensor Value = %d \r\n", sensor_value);
+        //printf("\r\n Dummy Sensor Value = %d \r\n", sensor_value);
+        printf("\r\n Latitude Value = %.2f Longitude Value = %.2f", latitude, longitude);
+        printf("\r\n Brightness Value = %.2f \r\n", v_brightness);
         ds1820.startConversion();
     } else {
         printf("\r\n No sensor found \r\n");
         return;
     }
 
-    packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer),
-                          "Dummy Sensor Value is %d", sensor_value);
+    //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Dummy Sensor Value is %d", sensor_value);
+    //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Brighness Value is %.0f", v_brightness);
+    
+    packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "L%.3fO%.3fB%.0f", latitude, longitude, v_brightness);
 
     retcode = lorawan.send(MBED_CONF_LORA_APP_PORT, tx_buffer, packet_len,
                            MSG_UNCONFIRMED_FLAG);
@@ -304,5 +356,152 @@ static void lora_event_handler(lorawan_event_t event)
             MBED_ASSERT("Unknown Event");
     }
 }
+
+
+
+void parseSentenceGPS(const char* sentence) {
+    if (strncmp(sentence, "$GPGGA,", 7) == 0) {
+        //Solo si empieza por "$GPGGA,"
+        counter_GPS++; 
+        if (counter_GPS < 2){ //solo obtenemos la primera que llega
+            
+            char* divisions[15];
+            int divisionCount = 0;
+            char *wordStart = (char*)sentence; // puntero a donde esta la frase
+            
+            int i =0;
+            while(true){ // para dividir la frase en cada uno de los elementos
+                i++;
+                char currentChar = sentence[i]; //primer caracter
+
+                //hasta que se llega a la coma o fin de string
+                if (currentChar == ',' || currentChar == '\0'){
+                    int length = &sentence[i] - wordStart;          // tamaño de la palabra restando direcciones de memoria
+                    
+                    // If the segment is non-empty, store it in divisions array
+                    if(length > 0){
+                        divisions[divisionCount] = (char*)malloc(length + 1);   
+                        strncpy(divisions[divisionCount], wordStart, length);   // Se copia la palabra
+                        divisions[divisionCount][length] = '\0';                
+                        divisionCount++;
+
+                        wordStart = (char*)sentence + i + 1; // se mueve al siguiente caracter
+
+                    }else{
+                        //si entre comas no hay caracter se almacena nulo
+                        divisions[divisionCount] = NULL;
+                        wordStart = (char*)sentence + i + 1;
+                        divisionCount ++;
+                    }
+                    
+
+                }
+
+                if(currentChar == '\0'){
+                    break;
+                }
+            }
+
+
+            
+            
+            latitude = strtof(divisions[2], nullptr);
+            
+            longitude = strtof(divisions[4], nullptr);
+            
+            
+            for (int j = 0; j < divisionCount; j++) {     
+                free(divisions[j]); // liberar la memoria
+            }
+        }
+
+        if (counter_GPS == 2){
+            counter_GPS = 0;
+        }
+    }
+}
+
+void location() {
+    char sentence[200];
+    int bytesRead = 0;  // To track the number of bytes stored in the sentence
+    
+    while (GPS.readable()) {
+        char c;
+        if (GPS.read(&c, 1)) {                  // Se lee un byte (un caracter)
+            if (c == '\n') {                        
+                sentence[bytesRead] = '\0';     
+                parseSentenceGPS(sentence);  
+                bytesRead = 0;                 
+            } else {
+                sentence[bytesRead] = c;        // se almacena en el array
+                bytesRead++;                    
+                if (bytesRead >= sizeof(sentence) - 1) {
+                    // Buffer overflow --> Discard the sentence
+                    bytesRead = 0;
+                }
+            }
+        }
+    }
+}
+
+
+float brightness(){
+    // Analog sensor
+    v_brightness = Brightness.read() * 100 * 1.20;
+    if(v_brightness>100){
+        v_brightness = 100;
+    }
+    
+    return v_brightness;
+}
+
+
+void tempAndHum(){
+    // I2C sensor
+    char command[1];
+    char data[2];
+    // HUMIDITY
+    command[0] = {0xE5};                        //for read humidity
+    i2c.write(Si7021_ADDRESS, command, 1);
+    i2c.read(Si7021_ADDRESS, data, 2);               // we save the result in two bytes (L and H)
+
+    uint16_t h = (data[0] << 8) | data[1];      // MSB at [0]
+    v_humidity = h * 125.0 / 65536 - 6.0;       // formula in datasheet
+    // TEMPERATURE
+    command[0] = {0xE3};
+    i2c.write(Si7021_ADDRESS, command, 1);           // Send command for reading
+    ThisThread::sleep_for(100ms);               // to perform the measurement                
+    i2c.read(Si7021_ADDRESS, data, 2);               // we save the result in two bytes (L and H)
+                
+    uint16_t temperature = (data[0]) << 8 | data[1];    // MSB at [0]
+    v_temp = ((175.72 * temperature) / 65536) - 46.85;  // formula in datasheet
+    
+
+
+    if (mode > 0) {
+        // Only if mode = NORMAL we update maximum, minimum and average values
+        if (mode != mode_ant){
+            mean_temperature = 0.0;
+            maximum_temperature = 0.0;
+            minimum_temperature = 1000.0;
+            maximum_humidity = 0;
+            minimum_humidity = 1000.0;
+            mean_humidity = 0;
+            mode_ant = mode;
+         }
+        counter_temperature++;
+        maximum_temperature = max(maximum_temperature,v_temp);
+        minimum_temperature = min(minimum_temperature,v_temp);
+        mean_temperature = (mean_temperature + v_temp);
+
+        maximum_humidity = max(maximum_humidity,v_humidity);
+        minimum_humidity = min(minimum_humidity,v_humidity);
+        mean_humidity = (mean_humidity + v_humidity);
+
+    }
+
+}
+
+
 
 // EOF
