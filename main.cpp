@@ -133,10 +133,15 @@ AnalogIn Brightness(PA_4);
 float v_temp;
 float v_humidity;
 
+float v_soilMoisture;
+DigitalOut switch_soil(PA_8);
+AnalogIn soil(PA_0);
+
 void location();
 void parseSentenceGPS(const char* sentence);
 float brightness();
 void tempAndHum();
+void soilMoisture();
 
 
 
@@ -234,10 +239,27 @@ static void send_message()
 
     location();
     brightness();
+    tempAndHum();
+    soilMoisture();
     
     if(latitude == 0 or longitude == 0){
         latitude = 43.348273;
         longitude = -8.349613;
+        
+        /*
+        latitude = 4023.68;
+        longitude = 337.34;
+
+        float lat = latitude / 100;
+        float latDec = int((lat - int(lat))*100)/60;
+        latitude = int(lat) + latDec;
+
+        float lon = longitude / 100;
+        float lonDec = int((lon - int(lon))*100)/60;
+        longitude = float(int(lon)) + (lonDec);
+        */
+
+
     }
 
     if (ds1820.begin()) {
@@ -245,6 +267,8 @@ static void send_message()
         sensor_value = ds1820.read();
         //printf("\r\n Dummy Sensor Value = %d \r\n", sensor_value);
         printf("\r\n Latitude Value = %.2f Longitude Value = %.2f", latitude, longitude);
+        printf("\r\n Temperature Value = %.1f Humidity Value = %.1f",v_temp, v_humidity);
+        printf("\r\n Soil moisture Value = %.0f", v_soilMoisture);
         printf("\r\n Brightness Value = %.2f \r\n", v_brightness);
         ds1820.startConversion();
     } else {
@@ -255,7 +279,7 @@ static void send_message()
     //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Dummy Sensor Value is %d", sensor_value);
     //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Brighness Value is %.0f", v_brightness);
     
-    packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "L%.3fO%.3fB%.0f", latitude, longitude, v_brightness);
+    packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "L%.3fO%.3fB%.0fT%.1fH%.0fS%.0f", latitude, longitude, v_brightness, v_temp, v_humidity, v_soilMoisture);
 
     retcode = lorawan.send(MBED_CONF_LORA_APP_PORT, tx_buffer, packet_len,
                            MSG_UNCONFIRMED_FLAG);
@@ -475,32 +499,19 @@ void tempAndHum(){
                 
     uint16_t temperature = (data[0]) << 8 | data[1];    // MSB at [0]
     v_temp = ((175.72 * temperature) / 65536) - 46.85;  // formula in datasheet
-    
 
-
-    if (mode > 0) {
-        // Only if mode = NORMAL we update maximum, minimum and average values
-        if (mode != mode_ant){
-            mean_temperature = 0.0;
-            maximum_temperature = 0.0;
-            minimum_temperature = 1000.0;
-            maximum_humidity = 0;
-            minimum_humidity = 1000.0;
-            mean_humidity = 0;
-            mode_ant = mode;
-         }
-        counter_temperature++;
-        maximum_temperature = max(maximum_temperature,v_temp);
-        minimum_temperature = min(minimum_temperature,v_temp);
-        mean_temperature = (mean_temperature + v_temp);
-
-        maximum_humidity = max(maximum_humidity,v_humidity);
-        minimum_humidity = min(minimum_humidity,v_humidity);
-        mean_humidity = (mean_humidity + v_humidity);
-
-    }
 
 }
+
+void soilMoisture(){
+    // Analog sensor
+    switch_soil = 1;
+    v_soilMoisture = soil.read() * 100;
+
+    switch_soil = 0;
+}
+
+
 
 
 
