@@ -137,6 +137,11 @@ float v_soilMoisture;
 DigitalOut switch_soil(PA_8);
 AnalogIn soil(PA_0);
 
+//RGB LED
+DigitalOut redLED(PB_14);   
+DigitalOut greenLED(PB_15);
+DigitalOut blueLED(PB_13);
+
 void location();
 void parseSentenceGPS(const char* sentence);
 float brightness();
@@ -315,11 +320,25 @@ static void receive_message()
         return;
     }
 
+    
+
     printf(" RX Data on port %u (%d bytes): ", port, retcode);
     for (uint8_t i = 0; i < retcode; i++) {
-        printf("%02x ", rx_buffer[i]);
+        //printf("%02x ", rx_buffer[i]);
+        printf("%d - %d \n", rx_buffer[i], i);
     }
     printf("\r\n");
+
+    if((rx_buffer[0] == 82) && (rx_buffer[1] == 101) && (rx_buffer[2] == 100)){
+        //82 = 01010010 = R
+        //101 = 01100101 = E
+        //100 = 01100100 = D
+        redLED=1;
+        greenLED=0;
+        blueLED=0;
+        printf("RED TURNED ON");
+    }
+
     
     memset(rx_buffer, 0, sizeof(rx_buffer));
 }
