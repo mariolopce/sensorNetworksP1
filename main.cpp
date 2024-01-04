@@ -122,31 +122,52 @@ static uint8_t APP_KEY[] = {0xf3, 0x1c, 0x2e, 0x8b, 0xc6, 0x71, 0x28, 0x1d,
 
 I2C i2c(PB_9, PB_8); 
 
+//GPS
 float timeGPS, latitude, longitude, altitude;
 int counter_GPS=0;
 BufferedSerial GPS(PA_9, PA_10, 9600);
 
+//brightness
 float v_brightness;
 AnalogIn Brightness(PA_4);
 
-
+//temp and humd
 float v_temp;
 float v_humidity;
 
+//soil
 float v_soilMoisture;
 DigitalOut switch_soil(PA_8);
 AnalogIn soil(PA_0);
+
+//RGB sensor
+DigitalOut led(PB_7); //led to light the place to measure
+int16_t red;
+int16_t green;
+int16_t blue;
+int16_t clear;
+
+//Accelerometer
+float x_acc = 0.0;
+float y_acc = 0.0;
+float z_acc = 0.0;
+
 
 //RGB LED
 DigitalOut redLED(PB_14);   
 DigitalOut greenLED(PB_15);
 DigitalOut blueLED(PB_13);
 
+
+
 void location();
 void parseSentenceGPS(const char* sentence);
 float brightness();
 void tempAndHum();
 void soilMoisture();
+void rgb();
+void read_colour();
+void accelerometer();
 
 
 
@@ -531,7 +552,94 @@ void soilMoisture(){
 }
 
 
+uint16_t read16(uint8_t reg) {
+    char color[2];
+    char cmd[1];
+    cmd[0] = reg;
+    i2c.write(TCS34725_ADDRESS, cmd, 1, true);
+    i2c.read(TCS34725_ADDRESS, color, 2);
+    return (color[1] << 8) | color[0];
+}
+
+void rgb(){
+
+    led=1;
+    
+    char data[2];
+    data[0] = COMMAND_ADDRESS;
+    data[1] = 0x03;
+    i2c.write(TCS34725_ADDRESS, data, 2);
+
+    wait_us(3000);
+    
+    clear = read16(TCS34725_CDATAL|COMMAND_ADDRESS);
+    red = read16(TCS34725_RDATAL|COMMAND_ADDRESS);
+    green = read16(TCS34725_GDATAL|COMMAND_ADDRESS);
+    blue = read16(TCS34725_BDATAL|COMMAND_ADDRESS);
+
+}
+
+
+void accelerometer() {
+    char reg[2];
+    reg[0] = 0x2A; // Address of the control register 1
+    reg[1] = 0x03; // Set active mode and fast mode
+    i2c.write(MMA8451_I2C_ADDRESS, reg, 2);
+
+    reg[0] = 0x09; // Address of FIFO setup register
+    reg[1] = 0x40; // set FIFO as  circular buffer
+    i2c.write(MMA8451_I2C_ADDRESS, reg, 2);
+
+    // Read the X, Y, Z data
+    char data[4]; // Changed the size to 6 as there are 6 bytes of data (2 bytes for each axis)
+    reg[0] = 0x01; // Address of the X_MSB register
+    i2c.write(MMA8451_I2C_ADDRESS, reg, 1);
+    i2c.read(MMA8451_I2C_ADDRESS, data, 4); // Read 6 bytes of data (2 bytes for each axis)
+
+    // Combine the high and low bytes for each axis
+    int8_t x = (data[1]);
+    int8_t y = (data[2]);
+    int8_t z = (data[3]);
+
+    int8_t x_flip=0;
+    int8_t y_flip=0;
+    int8_t z_flip=0;
+
+    
+    //get number from c'2 to sigend
+    if (x > 127){
+        x_flip = ~x + 0x01;
+        }
+    else {
+        x_flip = x;
+    }
+
+    if (y > 127){
+        y_flip = ~y + 0x01;
+        }
+    else {
+        y_flip = y;
+    }
+
+    if (z > 127){
+        z_flip = ~z + 0x01;
+        }
+    else {
+        z_flip = z;
+    }
+
+    // al ser 8 bits se divide entre 4096/64 para obetner valores en 1g
+    x_acc = (float)x_flip / 64; 
+    y_acc = (float)y_flip / 64;
+    z_acc = (float)z_flip / 64;
+
+    //Obtener  en m/s
+    x_acc = 9.81 * x_acc;
+    y_acc = 9.81 * y_acc;
+    z_acc = 9.81 * z_acc;
+
+
+}
 
 
 
-// EOF
