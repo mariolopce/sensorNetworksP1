@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 
@@ -168,6 +169,7 @@ void soilMoisture();
 void rgb();
 void read_colour();
 void accelerometer();
+static size_t setbuffer();
 
 
 
@@ -267,6 +269,8 @@ static void send_message()
     brightness();
     tempAndHum();
     soilMoisture();
+    rgb();
+    accelerometer();
     
     if(latitude == 0 or longitude == 0){
         latitude = 43.348273;
@@ -305,10 +309,11 @@ static void send_message()
     //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Dummy Sensor Value is %d", sensor_value);
     //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Brighness Value is %.0f", v_brightness);
     
-    packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "L%.3fO%.3fB%.0fT%.1fH%.0fS%.0f", latitude, longitude, v_brightness, v_temp, v_humidity, v_soilMoisture);
-
-    retcode = lorawan.send(MBED_CONF_LORA_APP_PORT, tx_buffer, packet_len,
+    //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "L%.3fO%.3fB%.0fT%.1fH%.0fS%.0f", latitude, longitude, v_brightness, v_temp, v_humidity, v_soilMoisture);
+    size_t length = setbuffer();
+    retcode = lorawan.send(MBED_CONF_LORA_APP_PORT, tx_buffer, length,
                            MSG_UNCONFIRMED_FLAG);
+
 
     if (retcode < 0) {
         retcode == LORAWAN_STATUS_WOULD_BLOCK ? printf("send - WOULD BLOCK\r\n")
@@ -325,6 +330,60 @@ static void send_message()
 
     printf("\r\n %d bytes scheduled for transmission \r\n", retcode);
     memset(tx_buffer, 0, sizeof(tx_buffer));
+}
+
+
+static size_t setbuffer(){
+    uint8_t vv_brightness = (int) v_brightness;
+    uint8_t vv_soil = (int) v_soilMoisture;
+    uint8_t vv_humidity = (int) v_humidity;
+    printf("\r\n Brightness: %d, Soil: %d, humidity: %d \r\n", vv_brightness, vv_soil, vv_humidity);
+    uint32_t vv_temp = *(uint32_t *) &v_temp; 
+    uint16_t vv_red = red; 
+    uint16_t vv_green = green;
+    uint16_t vv_blue = blue;
+    uint16_t vv_clear = clear; 
+    uint8_t xx_acc =  (int) (x_acc * 10);
+    uint8_t yy_acc = (int) (y_acc * 10);
+    uint8_t zz_acc = (int) (z_acc* 10);
+    uint32_t vv_latitude = *(uint32_t *) &latitude;
+    uint32_t vv_longitude = *(uint32_t *) &longitude;
+
+    size_t pos = 0;
+    tx_buffer[pos++] = vv_brightness & 0xff;
+    tx_buffer[pos++] = vv_soil & 0xff;
+    tx_buffer[pos++] = vv_humidity & 0xff;
+
+    tx_buffer[pos++] = vv_temp & 0xff;
+    tx_buffer[pos++] = (vv_temp >> 8) & 0xff;
+    tx_buffer[pos++] = (vv_temp >> 16) & 0xff;
+    tx_buffer[pos++] = (vv_temp >> 24) & 0xff;
+
+    tx_buffer[pos++] = vv_red & 0xff;
+    tx_buffer[pos++] = (vv_red >> 8) & 0xff;
+    tx_buffer[pos++] = vv_green & 0xff;
+    tx_buffer[pos++] = (vv_green >> 8) & 0xff;
+    tx_buffer[pos++] = vv_blue & 0xff;
+    tx_buffer[pos++] = (vv_blue >> 8) & 0xff;
+    tx_buffer[pos++] = vv_clear & 0xff;
+    tx_buffer[pos++] = (vv_clear >> 8) & 0xff;
+
+    tx_buffer[pos++] = xx_acc & 0xff;
+    tx_buffer[pos++] = yy_acc & 0xff;
+    tx_buffer[pos++] = zz_acc & 0xff;
+
+    tx_buffer[pos++] = vv_latitude & 0xff;
+    tx_buffer[pos++] = (vv_latitude >> 8) & 0xff;
+    tx_buffer[pos++] = (vv_latitude >> 16) & 0xff;
+    tx_buffer[pos++] = (vv_latitude >> 24) & 0xff;
+    tx_buffer[pos++] = vv_longitude & 0xff;
+    tx_buffer[pos++] = (vv_longitude >> 8) & 0xff;
+    tx_buffer[pos++] = (vv_longitude >> 16) & 0xff;
+    tx_buffer[pos++] = (vv_longitude >> 24) & 0xff;
+
+    printf("\r\n Payload - Brightness: %d, Soil: %d, humidity: %d \r\n", tx_buffer[0], tx_buffer[1], tx_buffer[2]);
+    return pos;
+
 }
 
 /**
@@ -350,14 +409,28 @@ static void receive_message()
     }
     printf("\r\n");
 
-    if((rx_buffer[0] == 82) && (rx_buffer[1] == 101) && (rx_buffer[2] == 100)){
+    if((rx_buffer[0] ==  82) && (rx_buffer[1] == 101) && (rx_buffer[2] == 100)){
         //82 = 01010010 = R
-        //101 = 01100101 = E
-        //100 = 01100100 = D
+        //101 = 01100101 = e
+        //100 = 01100100 = d
         redLED=1;
         greenLED=0;
         blueLED=0;
-        printf("RED TURNED ON");
+        printf("RED TURNED RED");
+    }else if((rx_buffer[0] == 71) && (rx_buffer[1] == 114) && (rx_buffer[2] == 101) && (rx_buffer[3] == 101) && (rx_buffer[4] == 110)){
+        //Green
+    
+        redLED=0;
+        greenLED=1;
+        blueLED=0;
+        printf("RED TURNED GREEN");
+    } else if((rx_buffer[0] == 79) && (rx_buffer[1] == 70) && (rx_buffer[2] == 70)){
+        //OFF
+
+        redLED=0;
+        greenLED=0;
+        blueLED=0;
+        printf("RED TURNED OFF");
     }
 
     
