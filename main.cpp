@@ -299,7 +299,8 @@ static void send_message()
         printf("\r\n Latitude Value = %.2f Longitude Value = %.2f", latitude, longitude);
         printf("\r\n Temperature Value = %.1f Humidity Value = %.1f",v_temp, v_humidity);
         printf("\r\n Soil moisture Value = %.0f", v_soilMoisture);
-        printf("\r\n Brightness Value = %.2f \r\n", v_brightness);
+        printf("\r\n Brightness Value = %.2f", v_brightness);
+        printf("\r\n Color: Red = %d Green = %d Blue = %d \r\n", red, green, blue);
         ds1820.startConversion();
     } else {
         printf("\r\n No sensor found \r\n");
@@ -338,16 +339,16 @@ static size_t setbuffer(){
     uint8_t vv_soil = (int) v_soilMoisture;
     uint8_t vv_humidity = (int) v_humidity;
     printf("\r\n Brightness: %d, Soil: %d, humidity: %d \r\n", vv_brightness, vv_soil, vv_humidity);
-    uint32_t vv_temp = *(uint32_t *) &v_temp; 
+    int32_t vv_temp = *(uint32_t *) &v_temp; 
     uint16_t vv_red = red; 
     uint16_t vv_green = green;
     uint16_t vv_blue = blue;
-    uint16_t vv_clear = clear; 
-    uint8_t xx_acc =  (int) (x_acc * 10);
-    uint8_t yy_acc = (int) (y_acc * 10);
-    uint8_t zz_acc = (int) (z_acc* 10);
-    uint32_t vv_latitude = *(uint32_t *) &latitude;
-    uint32_t vv_longitude = *(uint32_t *) &longitude;
+    //uint16_t vv_clear = clear; 
+    int8_t xx_acc =  (int) (x_acc * 10);
+    int8_t yy_acc = (int) (y_acc * 10);
+    int8_t zz_acc = (int) (z_acc* 10);
+    int32_t vv_latitude = *(uint32_t *) &latitude;
+    int32_t vv_longitude = *(uint32_t *) &longitude;
 
     size_t pos = 0;
     tx_buffer[pos++] = vv_brightness & 0xff;
@@ -365,8 +366,8 @@ static size_t setbuffer(){
     tx_buffer[pos++] = (vv_green >> 8) & 0xff;
     tx_buffer[pos++] = vv_blue & 0xff;
     tx_buffer[pos++] = (vv_blue >> 8) & 0xff;
-    tx_buffer[pos++] = vv_clear & 0xff;
-    tx_buffer[pos++] = (vv_clear >> 8) & 0xff;
+    //tx_buffer[pos++] = vv_clear & 0xff;
+    //tx_buffer[pos++] = (vv_clear >> 8) & 0xff;
 
     tx_buffer[pos++] = xx_acc & 0xff;
     tx_buffer[pos++] = yy_acc & 0xff;
