@@ -125,6 +125,7 @@ I2C i2c(PB_9, PB_8);
 
 //GPS
 float timeGPS, latitude, longitude, altitude;
+char* NS_ind, *EW_ind;
 int counter_GPS=0;
 BufferedSerial GPS(PA_9, PA_10, 9600);
 
@@ -273,13 +274,33 @@ static void send_message()
     accelerometer();
     
     if(latitude == 0 or longitude == 0){
-        latitude = 43.348273;
-        longitude = -8.349613;
-        
+    
+        latitude = 40.389725;
+        longitude = -3.628375;
+
+
+
+
         /*
         latitude = 4023.68;
         longitude = 337.34;
 
+        int latitudeDegrees = (int) latitude / 100;
+        double latitudeMinutes = latitude - latitudeDegrees*100;
+        latitude = latitudeDegrees + (latitudeMinutes/60);
+        
+
+        int longitudeDegrees = (int) longitude / 100;
+        double longitudeMinutes = longitude - longitudeDegrees*100;
+        longitude = -(longitudeDegrees + (longitudeMinutes/60));
+        
+
+        printf("\r\n Latitude %f %s Longitude %f %s  \r\n", latitude, NS_ind, longitude, NS_ind);
+        //latitude = 43.348273;
+        //longitude = -8.349613;
+        */
+
+        /*
         float lat = latitude / 100;
         float latDec = int((lat - int(lat))*100)/60;
         latitude = int(lat) + latDec;
@@ -300,18 +321,15 @@ static void send_message()
         printf("\r\n Temperature Value = %.1f Humidity Value = %.1f",v_temp, v_humidity);
         printf("\r\n Soil moisture Value = %.0f", v_soilMoisture);
         printf("\r\n Brightness Value = %.2f", v_brightness);
-        printf("\r\n Color: Red = %d Green = %d Blue = %d \r\n", red, green, blue);
+        printf("\r\n Color: Red = %d Green = %d Blue = %d ", red, green, blue);
+        printf("\r\n Acelerometro: X = %.1f Y = %.1f Z = %.1f \r\n", x_acc, y_acc, z_acc);
         ds1820.startConversion();
     } else {
         printf("\r\n No sensor found \r\n");
         return;
     }
 
-    //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Dummy Sensor Value is %d", sensor_value);
-    //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "Brighness Value is %.0f", v_brightness);
-    
-    //packet_len = snprintf((char *) tx_buffer, sizeof(tx_buffer), "L%.3fO%.3fB%.0fT%.1fH%.0fS%.0f", latitude, longitude, v_brightness, v_temp, v_humidity, v_soilMoisture);
-    size_t length = setbuffer();
+   size_t length = setbuffer();
     retcode = lorawan.send(MBED_CONF_LORA_APP_PORT, tx_buffer, length,
                            MSG_UNCONFIRMED_FLAG);
 
@@ -338,7 +356,6 @@ static size_t setbuffer(){
     uint8_t vv_brightness = (int) v_brightness;
     uint8_t vv_soil = (int) v_soilMoisture;
     uint8_t vv_humidity = (int) v_humidity;
-    printf("\r\n Brightness: %d, Soil: %d, humidity: %d \r\n", vv_brightness, vv_soil, vv_humidity);
     int32_t vv_temp = *(uint32_t *) &v_temp; 
     uint16_t vv_red = red; 
     uint16_t vv_green = green;
@@ -382,7 +399,6 @@ static size_t setbuffer(){
     tx_buffer[pos++] = (vv_longitude >> 16) & 0xff;
     tx_buffer[pos++] = (vv_longitude >> 24) & 0xff;
 
-    printf("\r\n Payload - Brightness: %d, Soil: %d, humidity: %d \r\n", tx_buffer[0], tx_buffer[1], tx_buffer[2]);
     return pos;
 
 }
@@ -546,6 +562,19 @@ void parseSentenceGPS(const char* sentence) {
             latitude = strtof(divisions[2], nullptr);
             
             longitude = strtof(divisions[4], nullptr);
+            NS_ind = divisions[3];
+            EW_ind = divisions[5];
+
+            if((latitude != 0) || (longitude != 0)){
+                 int latitudeDegrees = (int) latitude / 100;
+                double latitudeMinutes = latitude - latitudeDegrees*100;
+                latitude = latitudeDegrees + (latitudeMinutes/60);
+                
+
+                int longitudeDegrees = (int) longitude / 100;
+                double longitudeMinutes = longitude - longitudeDegrees*100;
+                longitude = -(longitudeDegrees + (longitudeMinutes/60));
+            }
             
             
             for (int j = 0; j < divisionCount; j++) {     
